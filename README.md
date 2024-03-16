@@ -46,3 +46,13 @@ fn handle_connection(mut stream: TcpStream) {
 
 ![Hello page screen capture](/archiveme/m3_ok.png)
 ![Not available page screen capture](/archiveme/m3_bad.png)
+
+
+### Reflection 4
+Setelah mengubah code tersebut, dijalankan endpoint `localhost:7878/sleep`, lalu `localhost:7878/`.
+Yang terjadi adalah keduanya akan tetap loading terus, meskipun hanyna endpoint `/sleep` yang ditambah delay.
+Hal ini terjadi karena server masih single-threaded, yang menyebabkan endpoint yang tidak ada delay tetap menunggu pada
+satu thread yang memproses endpoint `/sleep` yang menunggu waktu lama.
+
+![Sleep endpoint](/archiveme/m4_sleep.png)
+![Alt text](/archiveme/m4_delayed.png)
