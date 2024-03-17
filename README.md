@@ -34,7 +34,7 @@ Kita membuat 1 endpoint yang valid, beserta endpoint default ketika endpoint yan
 Endpoint yang valid (`/`) mengirim kode 200 dengan html di file `hello.html`.
 Endpoint yang tidak valid (contohnya `/bad`) mengirim kode 404 dengan html di file `404.html`.
 
-```rs
+```rust
 fn handle_connection(mut stream: TcpStream) {
     // -- snip --
     
@@ -101,3 +101,35 @@ Implementasi tersebut ditaruh di file baru `lib.rs` dan di import untuk digunaka
 Pada server, kita menggunakan 4 thread.
 Hasilnya adalah server dapat meng-handle beberapa request sekaligus, sehingga jika dilakukan simulasi di Milestone 4,
 maka endpoint `/` akan selesai dengan cepat meskipun endpoint `/sleep` masih menunggu.
+
+
+
+## Refelction Bonus??
+Fungsi `build` di `ThreadPool` bekerja sama dengan fungsi `new`, tetapi fungsi tersebut tidak panic ketika input size kurang dari sama dengan nol. Fungsi tersebut akan mengembalikan error saja.
+
+Awalnya, kita buat struct `PoolCreationError` yang menyimpan error message dalam bentuk static str.
+Struct ini berperan sebagai tipe output error.
+Fungsi `build` akan return value `Result<ThreadPool, PoolCreationError>`, yang berarti fungsi tersebut mengembalikan ThreadPool jika tidak ada error, dan mengembalikan `PoolCreationError` jika terdapat error.
+Untuk mengembalikan nilai error, maka kita menggunakan `Err` untuk membungkus `PoolCreationError`.
+Untuk mengembalikan nilai sukses, maka kita menggunakan `Ok` untuk membungkus `ThreadPool`.
+
+```rust
+// return Result dengan ThreadPool jika sukses, dan PoolCreationError jika error
+pub fn build(size: usize) -> Result<ThreadPool, PoolCreationError> {
+    // menggantikan panic
+    if size <= 0 {
+        // menggunakan Err untuk mengembalikan nilai error
+        return Err(PoolCreationError { error_message: "aaa" })
+    }
+    // dari ini ...
+    let (sender, receiver) = mpsc::channel();
+    let receiver = Arc::new(Mutex::new(receiver));
+    let mut workers = Vec::with_capacity(size);
+    for id in 0..size {
+        workers.push(Worker::new(id, Arc::clone(&receiver)));
+    }
+    // ... sampai ini sama persis dengan fungsi new()
+    // menggunakan Ok untuk menunjukkan nilai success / tidak error
+    Ok(ThreadPool { workers, sender })
+}
+```
