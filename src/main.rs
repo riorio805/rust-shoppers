@@ -5,14 +5,18 @@ use std::{
     thread,
     time::Duration,
 };
+use hello::ThreadPool;
 
 fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let listener = TcpListener::bind("localhost:7878").unwrap();
+    let pool = ThreadPool::new(4);
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        handle_connection(stream);
+        pool.execute(|| {
+            handle_connection(stream);
+        });
     }
 }
 
@@ -23,20 +27,19 @@ fn handle_connection(mut stream: TcpStream) {
         .map(|result| result.unwrap())
         .take_while(|line| !line.is_empty())
         .collect();
-    
-    println!("Request: {:#?}", http_request);
 
     let request_line = http_request[0].as_str();
     let (status_line, filename) =
     match request_line {
         "GET / HTTP/1.1"
-            => ("HTTP/1.1 200 OK", "hello.html"),
-        "GET /sleep HTTP/1.1" => {
-            thread::sleep(Duration::from_secs(15));
-            ("HTTP/1.1 200 OK", "hello.html")
-        },
+            =>  ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1"
+            => {
+                thread::sleep(Duration::from_secs(15));
+                ("HTTP/1.1 200 OK", "hello.html")
+            },
         _ 
-            => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+            =>  ("HTTP/1.1 404 NOT FOUND", "404.html"),
     };
 
     let contents = fs::read_to_string(format!("html/{}", filename)).unwrap();
@@ -45,6 +48,11 @@ fn handle_connection(mut stream: TcpStream) {
     let response =
         format!("{status_line}\r\nContent-Length:{length}\r\n\r\n{contents}");
     
-    println!("Response:\n{}", response);
     stream.write_all(response.as_bytes()).unwrap();
+
+    // println!("==========================");
+    // println!("Completed a request with:");
+    // println!("Request: {:#?}", http_request);
+    // println!("Response:\n{}", response);
+    // println!("==========================");
 }
