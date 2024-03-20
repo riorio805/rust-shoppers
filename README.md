@@ -6,12 +6,19 @@ The grust never end, and the crumb don't stop.
 The code works 👍👍
 
 Dalam fungsi `main()`:\
-`TcpListener` mendengar di address **127.0.0.1** (localhost) dengan port **7878**, dan menerima request yang masuk untuk diproses dalam fungsi `handle_connection()`.
+Dibuat suatu `TcpListener` yang mendengar di address **127.0.0.1** (localhost) dengan port **7878**.
+`TcpListener` tersebut menerima request yang masuk dengan metode `incoming()` dan diproses dalam fungsi `handle_connection()`.
 For loop yang digunakan untuk mengiterasi `TcpListener` tidak akan pernah keluar karena `listener.incoming() -> Incoming` akan terus menerima request.
 
 Dalam fungsi `handle_connection()`:\
 `buf_reader` merupakan sebuah buffer `BufReader` yang terkonek lewat TCP, yang akan menerima request yang datang.
 `http_request` merupakan array String yang terproses dari `buf_reader`, yang di print ke terminal.
+Dari `buf_reader`, proses pada string terdiri dari:
+- Membagi string dari buffer berdasarkan newline ('\n' atau '\r\n') menggunakan `lines` -> Iterator<Result<String>>
+- Unwrap tiap result tersebut menggunakan `map` -> Iterator<&String>
+- Menggunakan `take_while` untuk menjadi owner dari string tersebut -> Iterator<String>
+- `collect` untuk mengambil semua value di iterator dan menaruhnya di sebuah `Vector` (menggunakan Vector karena itu tipe yang dispesifikasi di http_request)
+Kita dapat langsung print http request ke terminal untuk mengetahui format request yang standar. 
 
 
 ## Reflection 2
@@ -20,7 +27,12 @@ The code works 👍👍
 Untuk mengembalikan respons HTML, harus dibuat sesuai protocol.
 Templatenya adalah sebuah header (seperti `"HTTP/1.1 200 OK"` untuk menunjukkan OK), lalu `Content-Length:` dengan length isi contentnya dalam jumlah bytes, baru content tersebut.
 Content tersebut digunakan modul `fs` untuk mengakses file html `hello.html` untuk di kirimkan kembali ke browser.
-Untuk mengirim respons HTML dapat menggunakan `TCPStream.write_all` pada respons tersebut lalu `unwrap` untuk mengembalikan value `Ok` stream tersebut.
+Kita taruh content HTML yang akan dikirim dalam sebuah string `response`, dengan menggunakan macro `format!` untuk memudahkan pembuatan string tersebut.
+Untuk mengirim respons HTML dapat menggunakan `TCPStream.write_all` pada string tersebut lalu `unwrap` untuk mengembalikan value `Ok` stream tersebut.
+
+Sekarang, respons HTML yang dikembalikan tidak memperhatikan request yang diberikan, yaitu header "200 OK" dengan file `hello.html`.
+Akibatnya pengguna dapat meberikan request apapun dan akan dikembalikan content yang sama.
+
 
 ![commit 2 screen capture](/archiveme/m2_working.png)
 
@@ -28,8 +40,9 @@ Untuk mengirim respons HTML dapat menggunakan `TCPStream.write_all` pada respons
 ## Reflection 3
 The code works 👍👍
 
+Kita dapat menentukan respons yang akan diberikan dengan memperhatikan request endpoint yang diberikan.
 Untuk membedakan antara endpoint yang valid dengan yang tidak pada request, diambil endpoint dari `http_request` dan mengubahnya ke sebuah string immutable (karena hanya butuh di-read).
-String tersebut diproses menggunakan `match` untuk return kode status dan file HTML untuk digunakan dalam respons dari request tersebut.
+String tersebut diproses menggunakan `match` (`switch` di bahasa pemrograman lain) untuk return kode status dan file HTML untuk digunakan dalam respons dari request tersebut.
 Kita membuat 1 endpoint yang valid, beserta endpoint default ketika endpoint yang diminta tidak ada.
 Endpoint yang valid (`/`) mengirim kode 200 dengan html di file `hello.html`.
 Endpoint yang tidak valid (contohnya `/bad`) mengirim kode 404 dengan html di file `404.html`.
@@ -57,6 +70,27 @@ fn handle_connection(mut stream: TcpStream) {
 
 ## Reflection 4
 Kode tersebut diubah untuk menambah endpoint `/sleep`, yang mengirim content yang sama dengan endpoint `/` tetapi dengan delay 15 detik untuk simulasi delay pada server.
+Delay tersebut dibuat dengan metode `thread::sleep` dengan durasi 15 detik dari modul durasi.
+Kode yang dimodifikasi adalah sebagai berikut:
+```rust
+fn handle_connection(mut stream: TcpStream) {
+    // -- snip --
+    let (status_line, filename) =
+        match request_line {
+            "GET / HTTP/1.1"
+                => ("HTTP/1.1 200 OK", "hello.html"),
+            "GET /sleep HTTP/1.1"
+                => {
+                    thread::sleep(Duration::from_secs(15)); // simulasi delay
+                    ("HTTP/1.1 200 OK", "hello.html")
+            },
+            _
+                => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+        };
+    // -- snip --
+}
+```
+
 Setelah mengubah kode tersebut, dijalankan endpoint `localhost:7878/sleep`, lalu `localhost:7878/`.
 Yang terjadi adalah keduanya akan tetap loading terus, meskipun hanyna endpoint `/sleep` yang ditambah delay.
 Hal ini terjadi karena server masih single-threaded, yang menyebabkan endpoint yang tidak ada delay tetap menunggu pada satu thread yang memproses endpoint `/sleep` yang menunggu waktu lama.
@@ -73,7 +107,8 @@ Namun, ini bukan solusi yang bagus karena bisa saja seseorang dapat mengirim ban
 Solusi yang tepat adalah kita hanya membuat beberapa thread saja, dan mengirim fungsi tersebut untuk dijalankan di sebuah thread jika ada.
 
 Untuk implementasinya, dibuat class baru yaitu `ThreadPool` dan `Worker`, dan .
-Class `Worker` menyimpan sebuah thread untuk menjalankan sebuah fungsi saat diberikan. 
+Class `Worker` menyimpan sebuah thread untuk menjalankan sebuah fungsi saat diberikan.
+Setiap `Worker` mempunyai id sendiri yang ditentukan oleh 
 Class `ThreadPool` untuk menyimpan `Worker` tersebut dan memilih worker yang bebas untuk diberikan fungsi yang diterima untuk dijalankan.
 Fungsi tersebut dikirim sebagai tipe `Box<dyn FnOnce() + Send + 'static>`. Jelasnya adalah sebagai berikut:
 - `dyn FnOnce() + Send + 'static` => Sebuah *trait object* untuk sebuah tipe objek. Trait tersebut digabungkan menggunakan `+`.
